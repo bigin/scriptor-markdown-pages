@@ -24,6 +24,11 @@ use Scriptor\Boot\Editor\Module;
  * source control the operator uses). The module exists so the editor
  * sidebar links somewhere when the markdown plugin is installed; the
  * page list mirrors the file system one-to-one.
+ *
+ * Render contract mirrors Scriptor's built-in modules: breadcrumbs go
+ * on `$editor->breadcrumbs` (rendered by the editor chrome above the
+ * page body), page title goes on `$editor->pageTitle` (drives the
+ * browser tab), everything else lands on `$editor->pageContent`.
  */
 final class DocumentationModule implements Module
 {
@@ -52,7 +57,10 @@ final class DocumentationModule implements Module
 
         $safe = $this->sanitiseSegments($segments);
         if ($safe === null) {
-            $this->renderError('Invalid path', 'Path segments may only contain letters, digits, dashes, and underscores.');
+            $this->renderError(
+                'Invalid path',
+                'Path segments may only contain letters, digits, dashes, and underscores.',
+            );
             return;
         }
 
@@ -84,25 +92,19 @@ final class DocumentationModule implements Module
     private function renderDocument(string $absolutePath, array $segments): void
     {
         $doc = $this->renderer->renderFile($absolutePath);
-        $this->editor->pageTitle = ($doc->title !== '' ? $doc->title : 'Documentation') . ' - Scriptor';
+        $title = $doc->title !== '' ? $doc->title : (end($segments) ?: 'Documentation');
 
-        $breadcrumb = $this->breadcrumb($segments);
-        $sourceLine = 'Source: <code>' . htmlspecialchars(
-            $this->relativise($absolutePath, $this->resolver->contentRoot()),
-            \ENT_QUOTES,
-        ) . '</code>';
+        $this->editor->pageTitle   = $title . ' - Scriptor';
+        $this->editor->breadcrumbs = $this->breadcrumb($segments);
 
-        $title = $doc->title !== '' ? $doc->title : end($segments);
-        $title = $title !== false ? $title : 'Documentation';
+        $sourceRel = $this->relativise($absolutePath, $this->resolver->contentRoot());
 
         $this->editor->pageContent =
-            '<div class="markdown-pages-preview">'
-            . '<p class="uk-text-meta">' . $breadcrumb . '</p>'
-            . '<h1>' . htmlspecialchars((string) $title, \ENT_QUOTES) . '</h1>'
-            . '<p class="uk-text-meta">' . $sourceLine . '. Edits flow through Git, not this view.</p>'
-            . '<hr>'
-            . $doc->html
-            . '</div>';
+            '<h1>' . htmlspecialchars((string) $title, \ENT_QUOTES) . '</h1>'
+            . '<p class="markdown-pages-source">Source: <code>'
+            . htmlspecialchars($sourceRel, \ENT_QUOTES)
+            . '</code>. Edits flow through Git, not this view.</p>'
+            . '<div class="markdown-pages-document">' . $doc->html . '</div>';
     }
 
     /**
@@ -110,41 +112,43 @@ final class DocumentationModule implements Module
      */
     private function renderListing(string $dir, array $segments): void
     {
-        $this->editor->pageTitle = ($segments === [] ? 'Documentation' : end($segments)) . ' - Scriptor';
+        $sectionName = $segments === [] ? 'Documentation' : (string) end($segments);
+
+        $this->editor->pageTitle   = $sectionName . ' - Scriptor';
+        $this->editor->breadcrumbs = $this->breadcrumb($segments);
 
         $entries = $this->scanDirectory($dir);
-        $breadcrumb = $this->breadcrumb($segments);
 
-        $itemsHtml = '';
+        $rows = '';
         if ($entries === []) {
-            $itemsHtml = '<li><em>Empty directory.</em></li>';
+            $rows = '<tr><td colspan="2"><em>Empty directory.</em></td></tr>';
         } else {
             foreach ($entries as $entry) {
                 $href = $this->editor->siteUrl . '/' . $this->editorSlug()
                     . ($segments === [] ? '' : '/' . implode('/', $segments))
                     . '/' . $entry['slug'] . '/';
-                $itemsHtml .= sprintf(
-                    '<li><a href="%s">%s%s</a></li>',
+                $iconClass = $entry['kind'] === 'dir' ? 'gg-list' : 'gg-screen';
+                $rows .= sprintf(
+                    '<tr><td class="markdown-pages-icon"><i class="%s"></i></td>'
+                    . '<td><a href="%s">%s</a></td></tr>',
+                    htmlspecialchars($iconClass, \ENT_QUOTES),
                     htmlspecialchars($href, \ENT_QUOTES),
-                    $entry['kind'] === 'dir' ? '📁 ' : '📄 ',
                     htmlspecialchars($entry['label'], \ENT_QUOTES),
                 );
             }
         }
 
         $this->editor->pageContent =
-            '<div class="markdown-pages-listing">'
-            . '<p class="uk-text-meta">' . $breadcrumb . '</p>'
-            . '<h1>' . htmlspecialchars($segments === [] ? 'Documentation' : (string) end($segments), \ENT_QUOTES) . '</h1>'
+            '<h1>' . htmlspecialchars($sectionName, \ENT_QUOTES) . '</h1>'
             . '<p>Read-only browser of the markdown content tree. Edits happen via Git.</p>'
-            . '<ul class="markdown-pages-list">' . $itemsHtml . '</ul>'
-            . '</div>';
+            . '<table class="markdown-pages-listing"><tbody>' . $rows . '</tbody></table>';
     }
 
     private function renderError(string $title, string $bodyHtml): void
     {
         http_response_code(404);
-        $this->editor->pageTitle = $title . ' - Scriptor';
+        $this->editor->pageTitle   = $title . ' - Scriptor';
+        $this->editor->breadcrumbs = $this->breadcrumb([]);
         $this->editor->pageContent =
             '<h1>' . htmlspecialchars($title, \ENT_QUOTES) . '</h1>'
             . '<p>' . $bodyHtml . '</p>';
@@ -156,14 +160,35 @@ final class DocumentationModule implements Module
     private function breadcrumb(array $segments): string
     {
         $root = $this->editor->siteUrl . '/' . $this->editorSlug() . '/';
-        $crumbs = ['<a href="' . htmlspecialchars($root, \ENT_QUOTES) . '">Documentation</a>'];
+        $items = [
+            sprintf(
+                '<li><a href="%s">Documentation</a></li>',
+                htmlspecialchars($root, \ENT_QUOTES),
+            ),
+        ];
         $accum = [];
         foreach ($segments as $seg) {
             $accum[] = $seg;
             $href = $this->editor->siteUrl . '/' . $this->editorSlug() . '/' . implode('/', $accum) . '/';
-            $crumbs[] = '<a href="' . htmlspecialchars($href, \ENT_QUOTES) . '">' . htmlspecialchars($seg, \ENT_QUOTES) . '</a>';
+            $items[] = sprintf(
+                '<li><i class="gg-chevron-right"></i></li>'
+                . '<li><a href="%s">%s</a></li>',
+                htmlspecialchars($href, \ENT_QUOTES),
+                htmlspecialchars($seg, \ENT_QUOTES),
+            );
         }
-        return implode(' / ', $crumbs);
+        // The last entry collapses to a plain <span> so it does not
+        // look like a clickable link to the page the user is already on.
+        if (count($items) > 1) {
+            $items[count($items) - 1] = preg_replace(
+                '#<li><a href="[^"]*">(.+?)</a></li>$#',
+                '<li><span>$1</span></li>',
+                $items[count($items) - 1],
+            ) ?? $items[count($items) - 1];
+        } elseif ($segments === []) {
+            $items = ['<li><span>Documentation</span></li>'];
+        }
+        return implode('', $items);
     }
 
     private function editorSlug(): string
@@ -214,7 +239,6 @@ final class DocumentationModule implements Module
         closedir($handle);
 
         usort($entries, static function (array $a, array $b): int {
-            // Directories first, then alphabetical.
             if ($a['kind'] !== $b['kind']) {
                 return $a['kind'] === 'dir' ? -1 : 1;
             }
