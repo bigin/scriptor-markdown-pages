@@ -100,7 +100,9 @@ final class Plugin implements ScriptorPlugin
             $context->addEditorMenuItem(new MenuItem(
                 slug:        $editorSlug,
                 label:       $editorLabel,
-                icon:        'gg-file-document',
+                // css-gg ships a small icon subset; "gg-copy" reads as
+                // stacked pages, which fits a documentation browser.
+                icon:        'gg-copy',
                 displayType: 'sidebar',
                 position:    50,
             ));
