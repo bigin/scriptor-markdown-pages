@@ -7,7 +7,6 @@ namespace Bigins\ScriptorMarkdownPages;
 use League\CommonMark\Environment\Environment;
 use League\CommonMark\Extension\CommonMark\CommonMarkCoreExtension;
 use League\CommonMark\Extension\GithubFlavoredMarkdownExtension;
-use League\CommonMark\Extension\HeadingPermalink\HeadingPermalinkExtension;
 use League\CommonMark\MarkdownConverter;
 use Symfony\Component\Yaml\Yaml;
 
@@ -16,8 +15,15 @@ use Symfony\Component\Yaml\Yaml;
  *
  * Frontmatter starts and ends with a line that is exactly `---`. Whatever
  * sits between is decoded as YAML; the rest is rendered through CommonMark
- * with the GFM extension (tables, task lists, autolinks, strikethrough)
- * and heading-permalink anchors so deep-links into a doc page work.
+ * with the GFM extension (tables, task lists, autolinks, strikethrough).
+ *
+ * Heading anchors: every `<h1>`..`<h6>` in the rendered output gets an
+ * `id` attribute derived from the heading text, so URL fragments still
+ * jump to a specific section. We do NOT emit an extra visible link or
+ * "#" symbol next to the heading; the previous HeadingPermalink
+ * extension was dropped because the symbol cluttered the rendered
+ * page (and could not be hidden from the DOM without leaving an
+ * empty `<a>` element behind).
  *
  * Code-block highlighting is intentionally NOT done here. Themes wire
  * Prism (or another client-side highlighter) and pick up the
@@ -33,18 +39,9 @@ final class Renderer
 
     public function __construct()
     {
-        $env = new Environment([
-            'heading_permalink' => [
-                'symbol'          => '#',
-                'html_class'      => 'heading-anchor',
-                'id_prefix'       => '',
-                'fragment_prefix' => '',
-                'insert'          => 'before',
-            ],
-        ]);
+        $env = new Environment();
         $env->addExtension(new CommonMarkCoreExtension());
         $env->addExtension(new GithubFlavoredMarkdownExtension());
-        $env->addExtension(new HeadingPermalinkExtension());
         $this->converter = new MarkdownConverter($env);
     }
 
@@ -66,8 +63,48 @@ final class Renderer
         }
 
         $html = $this->converter->convert($body)->getContent();
+        $html = $this->addHeadingIds($html);
 
         return new Document($title, $summary, $html, $frontmatter, $sourcePath);
+    }
+
+    /**
+     * Post-process the rendered HTML to add an `id` attribute to every
+     * `<h1>`..`<h6>` based on the heading text. Replaces the
+     * HeadingPermalink extension: we want URL fragments to work
+     * (`#welcome` jumps to the right section) but no visible anchor
+     * link or `#` symbol next to the heading.
+     *
+     * Duplicate slug guard: if the same slug appears twice in one
+     * document, the second one gets `-2`, the third `-3`, etc.
+     */
+    private function addHeadingIds(string $html): string
+    {
+        $seen = [];
+        return (string) preg_replace_callback(
+            '#<(h[1-6])>(.*?)</\1>#u',
+            function (array $m) use (&$seen): string {
+                $text = strip_tags($m[2]);
+                $slug = $this->slugify($text);
+                if ($slug === '') {
+                    return $m[0];
+                }
+                $count = ($seen[$slug] ?? 0) + 1;
+                $seen[$slug] = $count;
+                $id = $count === 1 ? $slug : $slug . '-' . $count;
+                return '<' . $m[1] . ' id="' . htmlspecialchars($id, \ENT_QUOTES) . '">'
+                    . $m[2] . '</' . $m[1] . '>';
+            },
+            $html,
+        );
+    }
+
+    private function slugify(string $text): string
+    {
+        $slug = mb_strtolower($text);
+        $slug = (string) preg_replace('/[^a-z0-9\s_-]/u', '', $slug);
+        $slug = (string) preg_replace('/[\s_-]+/', '-', $slug);
+        return trim($slug, '-');
     }
 
     private function stripLeadingH1(string $body): string

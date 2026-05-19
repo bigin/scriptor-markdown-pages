@@ -66,16 +66,20 @@ final class DocumentationModule implements Module
 
         $path = $contentRoot . ($safe === [] ? '' : '/' . implode('/', $safe));
 
+        // A `.md` leaf renders as a single document preview.
         if (is_file($path . '.md')) {
             $this->renderDocument($path . '.md', $safe);
             return;
         }
-        if (is_file($path . '/_index.md')) {
-            $this->renderDocument($path . '/_index.md', $safe);
-            return;
-        }
+        // Directory URL: always show the file/dir listing. If the
+        // directory has an `_index.md`, render its parsed content as
+        // a section intro ABOVE the listing (Hugo/Jekyll section-index
+        // convention). The previous flow rendered the _index alone and
+        // hid siblings, which made `welcome.md` invisible under
+        // `/editor/docs/developer-guide/`.
         if (is_dir($path)) {
-            $this->renderListing($path, $safe);
+            $intro = is_file($path . '/_index.md') ? $path . '/_index.md' : null;
+            $this->renderListing($path, $safe, $intro);
             return;
         }
 
@@ -110,9 +114,17 @@ final class DocumentationModule implements Module
     /**
      * @param list<string> $segments
      */
-    private function renderListing(string $dir, array $segments): void
+    private function renderListing(string $dir, array $segments, ?string $introPath = null): void
     {
         $sectionName = $segments === [] ? 'Documentation' : (string) end($segments);
+
+        $intro = null;
+        if ($introPath !== null) {
+            $intro = $this->renderer->renderFile($introPath);
+            if ($intro->title !== '') {
+                $sectionName = $intro->title;
+            }
+        }
 
         $this->editor->pageTitle   = $sectionName . ' - Scriptor';
         $this->editor->breadcrumbs = $this->breadcrumb($segments);
@@ -138,8 +150,19 @@ final class DocumentationModule implements Module
             }
         }
 
+        $introHtml = '';
+        if ($intro !== null) {
+            $sourceRel = $this->relativise($introPath ?? '', $this->resolver->contentRoot());
+            $introHtml = '<div class="markdown-pages-document">' . $intro->html . '</div>'
+                . '<p class="markdown-pages-source">Source: <code>'
+                . htmlspecialchars($sourceRel, \ENT_QUOTES) . '</code>. '
+                . 'Edits flow through Git, not this view.</p>'
+                . '<hr>';
+        }
+
         $this->editor->pageContent =
             '<h1>' . htmlspecialchars($sectionName, \ENT_QUOTES) . '</h1>'
+            . $introHtml
             . '<p>Read-only browser of the markdown content tree. Edits happen via Git.</p>'
             . '<table class="markdown-pages-listing"><tbody>' . $rows . '</tbody></table>';
     }
@@ -155,40 +178,52 @@ final class DocumentationModule implements Module
     }
 
     /**
+     * Build a breadcrumb trail in the same shape PagesModule emits:
+     * each non-leaf segment lives inside its own `<li>` together with
+     * the trailing `<i class="gg-chevron-right">` separator. The leaf
+     * is a `<li><span>` so it does not look clickable to the page the
+     * user is already on. This match matters because the editor's
+     * styles.css aligns the chevron via `.breadcrumbs li .gg-chevron-right`
+     * inside the same `inline-flex` row as the link; a standalone
+     * chevron-only `<li>` floats to the top of the row.
+     *
      * @param list<string> $segments
      */
     private function breadcrumb(array $segments): string
     {
         $root = $this->editor->siteUrl . '/' . $this->editorSlug() . '/';
-        $items = [
-            sprintf(
-                '<li><a href="%s">Documentation</a></li>',
-                htmlspecialchars($root, \ENT_QUOTES),
-            ),
-        ];
+
+        if ($segments === []) {
+            return '<li><span>Documentation</span></li>';
+        }
+
+        $html = sprintf(
+            '<li><a href="%s">Documentation</a><i class="gg-chevron-right"></i></li>',
+            htmlspecialchars($root, \ENT_QUOTES),
+        );
+
         $accum = [];
-        foreach ($segments as $seg) {
+        $count = count($segments);
+        foreach ($segments as $i => $seg) {
             $accum[] = $seg;
-            $href = $this->editor->siteUrl . '/' . $this->editorSlug() . '/' . implode('/', $accum) . '/';
-            $items[] = sprintf(
-                '<li><i class="gg-chevron-right"></i></li>'
-                . '<li><a href="%s">%s</a></li>',
-                htmlspecialchars($href, \ENT_QUOTES),
-                htmlspecialchars($seg, \ENT_QUOTES),
-            );
+            $isLast  = $i === $count - 1;
+            $href    = $this->editor->siteUrl . '/' . $this->editorSlug()
+                . '/' . implode('/', $accum) . '/';
+
+            if ($isLast) {
+                $html .= sprintf(
+                    '<li><span>%s</span></li>',
+                    htmlspecialchars($seg, \ENT_QUOTES),
+                );
+            } else {
+                $html .= sprintf(
+                    '<li><a href="%s">%s</a><i class="gg-chevron-right"></i></li>',
+                    htmlspecialchars($href, \ENT_QUOTES),
+                    htmlspecialchars($seg, \ENT_QUOTES),
+                );
+            }
         }
-        // The last entry collapses to a plain <span> so it does not
-        // look like a clickable link to the page the user is already on.
-        if (count($items) > 1) {
-            $items[count($items) - 1] = preg_replace(
-                '#<li><a href="[^"]*">(.+?)</a></li>$#',
-                '<li><span>$1</span></li>',
-                $items[count($items) - 1],
-            ) ?? $items[count($items) - 1];
-        } elseif ($segments === []) {
-            $items = ['<li><span>Documentation</span></li>'];
-        }
-        return implode('', $items);
+        return $html;
     }
 
     private function editorSlug(): string
