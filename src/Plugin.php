@@ -42,7 +42,7 @@ final class Plugin implements ScriptorPlugin
 
     public function version(): string
     {
-        return '0.1.2';
+        return '0.1.4';
     }
 
     public function register(PluginContext $context): void
@@ -53,12 +53,20 @@ final class Plugin implements ScriptorPlugin
         $contentRoot = (string) ($config['content_root']
             ?? $scriptorRoot . '/content');
         /** @var list<string> $tracks */
-        $tracks = (array) ($config['tracks']
-            ?? ['user-guide', 'developer-guide', 'api', 'extensions', 'news']);
+        $tracks = array_values((array) ($config['tracks']
+            ?? ['user-guide', 'developer-guide', 'api', 'extensions', 'news']));
 
+        $frontmatter    = new FrontmatterReader();
         $resolver       = new Resolver($contentRoot, $tracks);
-        $renderer       = new Renderer();
+        $renderer       = new Renderer($frontmatter);
         $pageFactory    = new VirtualPageFactory();
+        $navBuilder     = new NavBuilder($contentRoot, $tracks, $frontmatter);
+
+        // Frontend nav: contribute one top-level NavItem per track,
+        // with the active track's filesystem children populated.
+        // FrontendNavRegistry is responsible for merging contributions
+        // from all plugins; this builder only knows its own tracks.
+        $context->contributeFrontendNav($navBuilder);
 
         // Frontend: PageResolving + ContentRendering
         $context->subscribe(PageResolving::class, static function (PageResolving $event)
