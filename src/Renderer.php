@@ -8,7 +8,6 @@ use League\CommonMark\Environment\Environment;
 use League\CommonMark\Extension\CommonMark\CommonMarkCoreExtension;
 use League\CommonMark\Extension\GithubFlavoredMarkdownExtension;
 use League\CommonMark\MarkdownConverter;
-use Symfony\Component\Yaml\Yaml;
 
 /**
  * Parse a `.md` file with optional YAML frontmatter into a {@see Document}.
@@ -37,8 +36,9 @@ final class Renderer
 {
     private MarkdownConverter $converter;
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly FrontmatterReader $frontmatter = new FrontmatterReader(),
+    ) {
         $env = new Environment();
         $env->addExtension(new CommonMarkCoreExtension());
         $env->addExtension(new GithubFlavoredMarkdownExtension());
@@ -53,7 +53,7 @@ final class Renderer
 
     public function renderString(string $raw, string $sourcePath = ''): Document
     {
-        [$frontmatter, $body] = $this->splitFrontmatter($raw);
+        [$frontmatter, $body] = $this->frontmatter->parse($raw);
 
         $title   = (string) ($frontmatter['title'] ?? $this->firstHeading($body) ?? '');
         $summary = (string) ($frontmatter['summary'] ?? '');
@@ -118,36 +118,6 @@ final class Renderer
             return ltrim(substr($trimmed, $newlinePos + 1));
         }
         return $body;
-    }
-
-    /**
-     * @return array{0: array<string, mixed>, 1: string}
-     */
-    private function splitFrontmatter(string $raw): array
-    {
-        if (! str_starts_with($raw, "---\n") && ! str_starts_with($raw, "---\r\n")) {
-            return [[], $raw];
-        }
-        $body = substr($raw, 4);
-        $end  = strpos($body, "\n---\n");
-        if ($end === false) {
-            $end = strpos($body, "\n---\r\n");
-            if ($end === false) {
-                return [[], $raw];
-            }
-            $closeLen = 6;
-        } else {
-            $closeLen = 5;
-        }
-        $yaml = substr($body, 0, $end);
-        $rest = (string) substr($body, $end + $closeLen);
-
-        try {
-            $decoded = Yaml::parse($yaml);
-        } catch (\Throwable) {
-            return [[], $raw];
-        }
-        return [is_array($decoded) ? $decoded : [], $rest];
     }
 
     private function firstHeading(string $body): ?string
