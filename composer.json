@@ -1,0 +1,38 @@
+{
+    "name": "bigins/scriptor-markdown-pages",
+    "description": "File-system backed markdown pages for Scriptor 2.x.",
+    "type": "scriptor-plugin",
+    "license": "MIT",
+    "homepage": "https://github.com/bigin/scriptor-markdown-pages",
+    "keywords": ["scriptor", "scriptor-plugin", "cms", "markdown", "commonmark", "documentation"],
+    "authors": [
+        {
+            "name": "bigin",
+            "email": "juri.ehret@gmail.com",
+            "homepage": "https://ehret-studio.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "league/commonmark": "^2.5",
+        "symfony/yaml": "^7.0"
+    },
+    "extra": {
+        "scriptor": {
+            "plugin": "Bigins\\ScriptorMarkdownPages\\Plugin"
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Bigins\\ScriptorMarkdownPages\\": "src/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "platform": {
+            "php": "8.2.0"
+        }
+    },
+    "minimum-stability": "stable"
+}
