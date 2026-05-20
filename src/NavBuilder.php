@@ -17,9 +17,12 @@ use Scriptor\Boot\Frontend\Nav\NavItem;
  * theme's render layer.
  *
  * Shape:
- *  - One top-level NavItem per configured track (in the order tracks
- *    appear in config). Position is `index * 10`, leaving room for
- *    other plugins to interleave entries.
+ *  - One top-level NavItem per configured track. Position defaults to
+ *    `index * 10` (config-array order, leaving room for other plugins
+ *    to interleave), but a track's `_index.md` frontmatter may set an
+ *    explicit `weight:` that overrides the default. Sub-items already
+ *    sort by their own `weight` frontmatter; the top-level override
+ *    makes the same rule apply consistently at every depth.
  *  - For the track whose slug matches the first URL segment ("active
  *    track") the builder walks `<contentRoot>/<track>/` recursively
  *    and fills `NavItem::$children`. Non-active tracks render with
@@ -58,16 +61,18 @@ final class NavBuilder
         $activeTrack = $url->segments[0] ?? null;
         $items = [];
         foreach (array_values($this->tracks) as $index => $slug) {
-            $slug = (string) $slug;
+            $slug     = (string) $slug;
             $trackDir = $this->contentRoot . '/' . $slug;
-            $label    = $this->labelFor($trackDir, $slug);
+            $fm       = $this->frontmatter->read($trackDir . '/_index.md');
+            $label    = $this->labelFromFrontmatter($fm) ?? $this->titleize($slug);
+            $weight   = $this->intFromFrontmatter($fm, 'weight') ?? ($index * 10);
             $children = ($slug === $activeTrack && is_dir($trackDir))
                 ? $this->scanDir($trackDir, '/' . $slug . '/')
                 : [];
             $items[] = new NavItem(
                 url:      '/' . $slug . '/',
                 label:    $label,
-                position: $index * 10,
+                position: $weight,
                 children: $children,
             );
         }
@@ -147,12 +152,6 @@ final class NavBuilder
                 children: [],
             ),
         ];
-    }
-
-    private function labelFor(string $dir, string $fallbackSlug): string
-    {
-        $fm = $this->frontmatter->read($dir . '/_index.md');
-        return $this->labelFromFrontmatter($fm) ?? $this->titleize($fallbackSlug);
     }
 
     /**
