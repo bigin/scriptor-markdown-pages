@@ -23,9 +23,11 @@ use Scriptor\Boot\Plugin\PluginContext;
  *
  *   content_root    string  Absolute path to the markdown tree.
  *                           Defaults to `<scriptor-root>/content`.
- *   tracks          list    Allowed first URL segments. Defaults to
- *                           `user-guide`, `developer-guide`, `api`,
- *                           `extensions`, `news`.
+ *   tracks          list    Allowed first URL segments. If omitted,
+ *                           every subdirectory of `content_root` that
+ *                           contains an `_index.md` becomes a track,
+ *                           alphabetically sorted. Pass `[]` to opt
+ *                           out of plugin nav contributions entirely.
  *   editor_enabled  bool    Whether to register the Documentation
  *                           editor module + menu entry. Defaults true.
  *   editor_slug     string  URL slug for the editor module. Defaults
@@ -42,7 +44,7 @@ final class Plugin implements ScriptorPlugin
 
     public function version(): string
     {
-        return '0.1.4';
+        return '0.1.6';
     }
 
     public function register(PluginContext $context): void
@@ -54,7 +56,7 @@ final class Plugin implements ScriptorPlugin
             ?? $scriptorRoot . '/content');
         /** @var list<string> $tracks */
         $tracks = array_values((array) ($config['tracks']
-            ?? ['user-guide', 'developer-guide', 'api', 'extensions', 'news']));
+            ?? self::discoverTracks($contentRoot)));
 
         $frontmatter    = new FrontmatterReader();
         $resolver       = new Resolver($contentRoot, $tracks);
@@ -127,5 +129,46 @@ final class Plugin implements ScriptorPlugin
         $plugins = (array) ($config['plugins'] ?? []);
         $own = $plugins['markdown_pages'] ?? [];
         return is_array($own) ? $own : [];
+    }
+
+    /**
+     * Auto-discover tracks from the content root.
+     *
+     * Returns the slug of every immediate subdirectory of
+     * `$contentRoot` that contains an `_index.md` — matching the
+     * Resolver's expectation that `/<track>/` maps to
+     * `content/<track>/_index.md`. The `_index.md` requirement
+     * keeps random directories (vendor, .git, build artefacts) out
+     * of the nav.
+     *
+     * Sort is alphabetical for deterministic order. Themes that
+     * want a specific order should set `tracks` explicitly in
+     * config; an explicit `tracks` (including `[]`) bypasses this
+     * helper.
+     *
+     * @return list<string>
+     */
+    private static function discoverTracks(string $contentRoot): array
+    {
+        if (! is_dir($contentRoot)) {
+            return [];
+        }
+        $entries = @scandir($contentRoot);
+        if ($entries === false) {
+            return [];
+        }
+        $tracks = [];
+        foreach ($entries as $entry) {
+            if ($entry === '' || $entry[0] === '.') {
+                continue;
+            }
+            $dir = $contentRoot . '/' . $entry;
+            if (! is_dir($dir) || ! is_file($dir . '/_index.md')) {
+                continue;
+            }
+            $tracks[] = $entry;
+        }
+        sort($tracks);
+        return $tracks;
     }
 }
