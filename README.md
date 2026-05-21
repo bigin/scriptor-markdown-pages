@@ -36,7 +36,7 @@ return [
 | Key | Default | Effect |
 |---|---|---|
 | `content_root` | `<scriptor-root>/content` | Where the markdown tree lives. |
-| `tracks` | `['user-guide', 'developer-guide', 'api', 'extensions', 'news']` | URL first segments the plugin claims. Anything else falls through to other resolvers (DB pages, themes). |
+| `tracks` | auto-discovered from `content_root` | URL first segments the plugin claims. If omitted, every immediate subdirectory of `content_root` that holds an `_index.md` becomes a track, alphabetically sorted. Pass `tracks => []` to opt out of plugin nav contributions entirely (useful when the plugin is installed but a theme should not surface markdown tracks in its top-nav). |
 | `editor_enabled` | `true` | Register the Documentation module + menu entry in the editor. |
 | `editor_slug` | `'docs'` | URL slug for the editor module. |
 | `editor_label` | `'Documentation'` | Sidebar label (i18n key or literal). |
