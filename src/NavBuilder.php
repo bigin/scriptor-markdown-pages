@@ -17,12 +17,15 @@ use Scriptor\Boot\Frontend\Nav\NavItem;
  * theme's render layer.
  *
  * Shape:
- *  - One top-level NavItem per configured track. Position defaults to
- *    `index * 10` (config-array order, leaving room for other plugins
- *    to interleave), but a track's `_index.md` frontmatter may set an
- *    explicit `weight:` that overrides the default. Sub-items already
- *    sort by their own `weight` frontmatter; the top-level override
- *    makes the same rule apply consistently at every depth.
+ *  - One top-level NavItem per configured track *whose `_index.md`
+ *    exists on disk*. Tracks without an `_index.md` are skipped so
+ *    the nav cannot advertise a link that the Resolver would 404 on.
+ *    Position defaults to `index * 10` (config-array order, leaving
+ *    room for other plugins to interleave), but a track's `_index.md`
+ *    frontmatter may set an explicit `weight:` that overrides the
+ *    default. Sub-items already sort by their own `weight`
+ *    frontmatter; the top-level override makes the same rule apply
+ *    consistently at every depth.
  *  - For the track whose slug matches the first URL segment ("active
  *    track") the builder walks `<contentRoot>/<track>/` recursively
  *    and fills `NavItem::$children`. Non-active tracks render with
@@ -61,9 +64,20 @@ final class NavBuilder
         $activeTrack = $url->segments[0] ?? null;
         $items = [];
         foreach (array_values($this->tracks) as $index => $slug) {
-            $slug     = (string) $slug;
-            $trackDir = $this->contentRoot . '/' . $slug;
-            $fm       = $this->frontmatter->read($trackDir . '/_index.md');
+            $slug      = (string) $slug;
+            $trackDir  = $this->contentRoot . '/' . $slug;
+            $indexFile = $trackDir . '/_index.md';
+            // Skip tracks whose `_index.md` is missing: the Resolver
+            // requires that same file to map `/<track>/` to content,
+            // so emitting a nav entry here would just produce a
+            // menu link that 404s. Tracks may be configured
+            // explicitly via `tracks => [...]` or auto-discovered
+            // from `content_root`; either way, no `_index.md`
+            // means no resolvable URL.
+            if (! is_file($indexFile)) {
+                continue;
+            }
+            $fm       = $this->frontmatter->read($indexFile);
             $label    = $this->labelFromFrontmatter($fm) ?? $this->titleize($slug);
             $weight   = $this->intFromFrontmatter($fm, 'weight') ?? ($index * 10);
             $children = ($slug === $activeTrack && is_dir($trackDir))
