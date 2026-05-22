@@ -20,10 +20,15 @@ use Scriptor\Boot\Frontend\Page;
  * - `name`             page title (frontmatter, or first H1)
  * - `data.slug`        last URL segment (used by templates that link
  *                      back to themselves)
- * - `data.template`    "markdown-section" so themes that ship a
- *                      custom layout pick it up; themes without it
- *                      fall through to `basic.php` and still render
- *                      via {@see ContentRendering}
+ * - `data.template`    `template:` from the .md's frontmatter when
+ *                      present and slug-safe (`^[A-Za-z0-9_-]+$`);
+ *                      otherwise the default `"markdown-section"`.
+ *                      Themes that ship a matching `<template>.php`
+ *                      pick it up; themes without it fall through to
+ *                      `basic.php` and still render via
+ *                      {@see ContentRendering}. The slug guard keeps
+ *                      a hostile frontmatter value (`../../etc/passwd`)
+ *                      from reaching the template loader.
  * - `data.menu_title`  same as title (used by sidebar entries)
  * - `data.content`     empty (the real HTML lives in the HTML marker)
  * - `data.parent`      0 (markdown pages are flat for sidebar purposes)
@@ -50,6 +55,7 @@ final class VirtualPageFactory
     {
         $slug = $urlSegments === [] ? '' : (string) $urlSegments[array_key_last($urlSegments)];
         $title = $doc->title !== '' ? $doc->title : 'Documentation';
+        $template = self::templateFromFrontmatter($doc->frontmatter);
 
         $item = new Item(
             id:         null,
@@ -60,7 +66,7 @@ final class VirtualPageFactory
             active:     true,
             data:       [
                 'slug'                => $slug,
-                'template'            => self::TEMPLATE_NAME,
+                'template'            => $template,
                 'menu_title'          => $title,
                 'content'             => '',
                 'parent'              => 0,
@@ -73,5 +79,23 @@ final class VirtualPageFactory
         );
 
         return new Page($item);
+    }
+
+    /**
+     * Pick the template name from the .md frontmatter when it is
+     * present and matches the slug shape that Scriptor's template
+     * loader accepts. Anything else (missing key, non-string,
+     * empty, slashes, dots, traversal) falls back to the default,
+     * so a hostile frontmatter cannot steer the loader.
+     *
+     * @param array<string, mixed> $fm
+     */
+    private static function templateFromFrontmatter(array $fm): string
+    {
+        $candidate = $fm['template'] ?? null;
+        if (\is_string($candidate) && preg_match('/^[A-Za-z0-9_-]+$/', $candidate) === 1) {
+            return $candidate;
+        }
+        return self::TEMPLATE_NAME;
     }
 }
