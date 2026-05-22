@@ -77,16 +77,29 @@ summary: "Build your first Scriptor theme from an empty directory."
 ---
 ```
 
-The plugin reads `title` (for the page chrome H1) and `summary` (for meta description). Any other key is exposed via `$doc->frontmatter` if your templates pull it.
+The plugin reads `title` (for the page chrome H1), `summary` (for meta description), and `template` (to pick the theme template). Any other key is exposed via `$doc->frontmatter` if your templates pull it.
 
 When `title` is present, the leading `# Heading` in the body is stripped at render time so the chrome's H1 does not duplicate it (Hugo/Jekyll convention).
 
 ## Theme integration
 
-The plugin synthesises a Scriptor `Page` DTO with template name `markdown-section`. Themes can either:
+The plugin synthesises a Scriptor `Page` DTO with template name `markdown-section` by default. Themes can either:
 
 - **Provide a `markdown-section.php` template** for a custom layout (sidebar, breadcrumbs, etc.).
 - **Let it fall through to `basic.php`**. The default rendering path will still call `$site->render('content')`, which dispatches `ContentRendering`, which this plugin substitutes with the pre-rendered HTML.
+
+### Per-page template override
+
+Any `.md` can pick a different template by setting `template:` in its frontmatter:
+
+```yaml
+---
+title: "Building cathedrals"
+template: blog-post
+---
+```
+
+The value must match `^[A-Za-z0-9_-]+$` (so `blog-post`, `essay_long`, `Landing2` are fine; anything with a slash, dot, or other punctuation is rejected and the default kicks in). The theme then needs a matching `<name>.php`; if it is missing, the usual `basic.php` fallback still applies.
 
 The plugin's CSS expectations match Scriptor's bundled themes (Prism for code blocks, UIkit base styles), but nothing is enforced.
 
