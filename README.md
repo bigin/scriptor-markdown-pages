@@ -8,11 +8,23 @@ This is the reference third-party plugin for the Scriptor Plugin API introduced 
 
 ## Installation
 
+**Inside Scriptor.** Scriptor's `composer.json` already ships a `repositories` block pointing at the VCS sources for `bigins/*` plugins, so a plain require is enough:
+
 ```bash
 composer require bigins/scriptor-markdown-pages
 ```
 
-The plugin auto-registers via Composer's `installed.json` (Scriptor reads `type: scriptor-plugin` packages at boot). No code changes needed in your Scriptor install or theme; the next request picks the plugin up.
+**Standalone or any other project.** This package is not on Packagist, so Composer has to be told where to find it with a one-time `repositories` entry, then required:
+
+```bash
+composer config repositories.scriptor-markdown-pages \
+  vcs https://github.com/bigin/scriptor-markdown-pages
+composer require bigins/scriptor-markdown-pages:^0.1
+```
+
+The first command adds a VCS repository to your `composer.json`; without it `composer require` reports *"Could not find a version of package …"*.
+
+Either way the plugin auto-registers via Composer's `installed.json` (Scriptor reads `type: scriptor-plugin` packages at boot). No code changes needed in your Scriptor install or theme; the next request picks the plugin up.
 
 ## Configuration
 
