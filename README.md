@@ -85,7 +85,20 @@ summary: "Build your first Scriptor theme from an empty directory."
 ---
 ```
 
-The plugin reads `title` (for the page chrome H1), `summary` (for meta description), and `template` (to pick the theme template). Any other key is exposed via `$doc->frontmatter` if your templates pull it.
+The plugin reads `title` (for the page chrome H1), `summary` (for the meta description and listing/feed blurb), and `template` (to pick the theme template). Any other key is exposed via `$doc->frontmatter` if your templates pull it.
+
+### SEO meta keys
+
+These optional keys are copied onto the resolved page so a theme's `<head>` can read them as `$site->page-><key>` without re-parsing the file (only added when present):
+
+| Key | On the page as | Use |
+|---|---|---|
+| `summary` | `$page->summary` | Meta-description default; also the listing/feed blurb. |
+| `meta_title` | `$page->meta_title` | Override the `<title>` tag; defaults to `title` when absent. |
+| `meta_description` | `$page->meta_description` | Override the meta description; falls back to `summary`. |
+| `meta_keywords` | `$page->meta_keywords` | `<meta name="keywords">`. |
+
+A theme picks its own precedence, e.g. `meta_description` → `summary` → site default. Most pages only need `summary`; the `meta_*` keys are a per-page override for when the SEO text should differ from the blurb.
 
 When `title` is present, the leading `# Heading` in the body is stripped at render time so the chrome's H1 does not duplicate it (Hugo/Jekyll convention).
 
