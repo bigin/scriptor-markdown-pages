@@ -44,7 +44,7 @@ final class Plugin implements ScriptorPlugin
 
     public function version(): string
     {
-        return '0.1.8';
+        return '0.1.9';
     }
 
     public function register(PluginContext $context): void
@@ -69,6 +69,16 @@ final class Plugin implements ScriptorPlugin
         // FrontendNavRegistry is responsible for merging contributions
         // from all plugins; this builder only knows its own tracks.
         $context->contributeFrontendNav($navBuilder);
+
+        // Expose a sitemap-friendly enumeration of every routable markdown
+        // URL (+ mtime) so a theme or another plugin can list these pages
+        // without re-deriving the content root, track list, or URL
+        // mapping. Built here where that config is already resolved;
+        // consumed via the DI container as UrlEnumerator::class.
+        $context->container()->add(
+            UrlEnumerator::class,
+            new UrlEnumerator($contentRoot, $tracks),
+        );
 
         // Frontend: PageResolving + ContentRendering
         $context->subscribe(PageResolving::class, static function (PageResolving $event)

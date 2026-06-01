@@ -111,6 +111,22 @@ The value must match `^[A-Za-z0-9_-]+$` (so `blog-post`, `essay_long`, `Landing2
 
 The plugin's CSS expectations match Scriptor's bundled themes (Prism for code blocks, UIkit base styles), but nothing is enforced.
 
+## Sitemap / URL enumeration
+
+The plugin owns the URL space of its markdown tree, so it also exposes a list of every routable URL for sitemap-style consumers. During boot it binds a `UrlEnumerator` into the DI container, already configured with the resolved content root and track list:
+
+```php
+use Bigins\ScriptorMarkdownPages\UrlEnumerator;
+
+$enum = $container->get(UrlEnumerator::class);
+foreach ($enum->all() as ['path' => $path, 'lastmod' => $ts]) {
+    // $path  e.g. '/developer-guide/cookbook/sitemap-xml/'
+    // $ts    unix mtime of the file that serves it (0 if unreadable)
+}
+```
+
+Candidate paths are discovered by walking the content tree, then each is run back through the same `Resolver` the frontend uses, so the enumeration can never advertise a URL the site would 404 on and never drifts from the routing rules. Guard the lookup with `class_exists(UrlEnumerator::class) && $container->has(UrlEnumerator::class)` if your theme must also work when this plugin is absent.
+
 ## Editor module
 
 When `editor_enabled` is true, a "Documentation" entry appears in the editor sidebar. It points at a read-only browser:
