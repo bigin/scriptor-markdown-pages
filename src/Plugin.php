@@ -44,7 +44,7 @@ final class Plugin implements ScriptorPlugin
 
     public function version(): string
     {
-        return '0.1.9';
+        return '0.1.10';
     }
 
     public function register(PluginContext $context): void
